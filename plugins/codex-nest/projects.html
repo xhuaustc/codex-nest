@@ -161,7 +161,18 @@ nav.project-dragging #root-drop {
 .editor textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 #project-action-status:not(:empty) { margin: 9px 0; color: var(--muted); font-size: 12px; }
 #conversations { margin-top: 22px; }
-#chats .chat-row { min-width: 0; flex: 1; align-items: flex-start; gap: 7px; padding: 5px 8px; border: 0; background: transparent; text-align: left; text-decoration: none; overflow-wrap: anywhere; }
+.chat-row { gap: 7px; padding: 5px 8px; border: 0; text-align: start; overflow-wrap: anywhere; }
+#new-chat { max-width: 100%; margin: 8px 0 4px; background: var(--sidebar); font-weight: 600; }
+#new-chat:hover:not(:disabled) { background: var(--pressed); }
+#new-chat::before {
+  content: "";
+  flex: 0 0 12px;
+  height: 12px;
+  background: linear-gradient(currentColor, currentColor) center / 10px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1px 10px no-repeat;
+}
+#chats { margin-top: 0; }
+#chats .chat-row { min-width: 0; flex: 1; align-items: flex-start; background: transparent; text-decoration: none; }
 #chats .chat-row:hover { background: var(--pressed); }
 .archive-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .archive-heading h2 { font-size: 16px; }
@@ -203,8 +214,11 @@ nav.project-dragging #root-drop {
   <form id="move-node" class="controls" hidden>
     <label for="parent" data-copy="moveTo">Move to</label><select id="parent"></select><button type="submit" data-copy="move">Move</button>
   </form>
-  <p id="hint"></p>
-  <div id="conversations" hidden><h3 data-copy="chats">Chats</h3><ul id="chats"></ul></div>
+  <div id="conversations" hidden>
+    <h3 data-copy="chats">Chats</h3>
+    <button id="new-chat" class="row chat-row" type="button" data-copy="newChat" disabled>New chat</button>
+    <p id="hint" role="status"></p><ul id="chats"></ul>
+  </div>
 </section>
 </main>
 <div id="sidebar-popover" popover="manual" role="group" data-copy-label="projectActions"></div>
@@ -255,6 +269,7 @@ let data = null;
 let selected = null;
 let connected = false;
 let loadingProjects = false;
+let openingChat = false;
 let projectEditor = null;
 let editingGroup = null;
 let savingProject = false;
@@ -272,6 +287,8 @@ const copy = {
   project: ["项目", "Project"],
   group: ["分组", "Group"],
   chats: ["聊天", "Chats"],
+  newChat: ["新建聊天", "New chat"],
+  primaryUnavailable: ["项目的 Primary 目录不可用。", "The primary project directory is unavailable."],
   sidebarActions: ["项目区操作", "Project sidebar actions"],
   projectActions: ["项目操作", "Project actions"],
   groupActions: ["分组操作", "Group actions"],
@@ -970,7 +987,8 @@ function renderDetails() {
     ? data.initial ? "chatsNeedConnection" : "noActiveChats" : null);
   const chats = byId("chats");
   chats.replaceChildren();
-  byId("conversations").hidden = !activeChats.length;
+  byId("conversations").hidden = !project;
+  updateNewChat(project);
   for (const chat of activeChats) {
     const li = element("li", undefined, "row");
     const link = chatLink(chat, "row chat-row");
@@ -988,6 +1006,28 @@ function renderDetails() {
     chats.append(li);
   }
 }
+
+function updateNewChat(project) {
+  const button = byId("new-chat");
+  button.disabled = openingChat || !connected || !data?.canManage || !project?.nativeId || !project.path;
+  button.title = t(project && !project.path ? "primaryUnavailable" : "newChat");
+}
+
+byId("new-chat").addEventListener("click", async () => {
+  const project = nodes.get(selected)?.project;
+  if (byId("new-chat").disabled || !project?.nativeId) return;
+  const projectId = selected;
+  openingChat = true;
+  updateNewChat(project);
+  try {
+    await runProjectAction("open_project_chat", {projectId: project.nativeId});
+  } catch (error) {
+    if (selected === projectId) showError("hint", error);
+  } finally {
+    openingChat = false;
+    updateNewChat(nodes.get(selected)?.project);
+  }
+});
 
 function render() {
   finishProjectDrag();
@@ -1142,7 +1182,7 @@ if (!embedded) {
 } else {
   request("ui/initialize", {
     protocolVersion: "2026-01-26",
-    appInfo: {name: "codex-nest", version: "0.4.13"},
+    appInfo: {name: "codex-nest", version: "0.4.14"},
     appCapabilities: {},
   }).then(result => {
     connected = true;

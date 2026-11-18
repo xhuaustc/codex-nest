@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
+from urllib.parse import quote, urlencode
 
 from project_api import AppServer, ProjectAPIError, project_fields
 
@@ -42,6 +43,8 @@ ACTION_TOOLS = [
      {**FIELDS, "projectId": ID}, ["projectId", "name", "folders"]),
     ("open_project_folder", "Open a registered project directory in Finder",
      {"projectId": ID, "folder": ID}, ["projectId", "folder"]),
+    ("open_project_chat", "Open a new Codex chat for this project in its primary directory",
+     {"projectId": ID}, ["projectId"]),
 ]
 API_ERRORS = (ProjectAPIError, OSError, ValueError, AttributeError, KeyError, TypeError)
 
@@ -196,7 +199,7 @@ def project_payload(*, include_chats=True):
 
 def action_result(name, args):
     try:
-        fields = project_fields(args["name"], args["folders"]) if name != "open_project_folder" else None
+        fields = project_fields(args["name"], args["folders"]) if name in {"create_project", "edit_project"} else None
         with AppServer() as api:
             if name == "create_project":
                 project = api.call("project/create", {**fields, "idempotencyKey": args["requestId"]})["project"]
@@ -210,6 +213,16 @@ def action_result(name, args):
                 raise ProjectAPIError("folderUnavailable", "The working directory has changed or is unavailable. Refresh and try again.")
             subprocess.run(["/usr/bin/open", "-a", "Finder", folder], check=True, timeout=5,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            result = {"opened": True}
+        elif name == "open_project_chat":
+            view = native_project(project, legacy_aliases(codex_home()))
+            primary = Path(view["path"])
+            if not primary.is_absolute() or not primary.is_dir():
+                raise ProjectAPIError("primaryUnavailable", "The primary project directory is unavailable.")
+            # Use the identity known to Desktop, which may differ from the app-server ID.
+            query = urlencode({"projectId": view["id"], "path": str(primary)}, quote_via=quote)
+            subprocess.run(["/usr/bin/open", "-a", "ChatGPT", "codex://threads/new?" + query],
+                           check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             result = {"opened": True}
         else:
             view = native_project(project, legacy_aliases(codex_home()))
@@ -244,7 +257,7 @@ class Server:
             version = params["protocolVersion"]
             return {
                 "protocolVersion": version if version in PROTOCOLS else "2025-11-25",
-                "serverInfo": {"name": "codex-nest", "version": "0.4.13", "icons": TOOL["icons"]},
+                "serverInfo": {"name": "codex-nest", "version": "0.4.14", "icons": TOOL["icons"]},
                 "capabilities": {"tools": {}, "resources": {}},
             }
         if method == "ping":

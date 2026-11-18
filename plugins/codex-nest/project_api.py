@@ -36,7 +36,7 @@ class AppServer:
         try:
             self.selector.register(self.process.stdout, selectors.EVENT_READ)
             self.call("initialize", {
-                "clientInfo": {"name": "codex_nest", "version": "0.4.13"},
+                "clientInfo": {"name": "codex_nest", "version": "0.4.14"},
                 "capabilities": {"experimentalApi": True},
             })
             self.send({"method": "initialized"})
