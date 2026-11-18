@@ -14,12 +14,21 @@ Codex 桌面端的逻辑项目树。分组可以包含项目和子分组，项�
 
 左侧「项目」标题旁的 `+` 可以将一个或多个现有目录注册到本机 Codex。选中分组时，新项目会出现在该分组中。项目行的 `…` 菜单提供「编辑项目」和各个工作目录。点击工作目录可在 macOS Finder 中打开。创建和编辑使用桌面自带的 Codex app-server 项目接口，该接口目前是实验性的。
 
+## 安装
+
+在仓库根目录运行：
+
+```sh
+codex plugin marketplace add "$PWD"
+codex plugin add codex-nest@codex-nest
+```
+
+仓库级 [marketplace manifest](.agents/plugins/marketplace.json) 注册了 [Codex Nest 插件](plugins/codex-nest)。本地 MCP Server 需要 Python 3，无第三方依赖。
+
 ## 桌面验证
 
-插件包位于 [plugins/codex-nest](plugins/codex-nest)。本地 MCP Server 需要 Python 3，无第三方依赖。
-
-1. 从本地 marketplace 安装原型，在桌面应用切换到 Codex 模式。
-2. 检查全局侧栏是否显示 **Codex Nest**。也可打开 [Codex Nest 项目树](codex://plugins/codex-nest@codex-nest-preview/app/logical_projects)。
+1. 安装插件后，在桌面应用切换到 Codex 模式并新开一个聊天。
+2. 检查全局侧栏是否显示 **Codex Nest**。也可打开 [Codex Nest 项目树](codex://plugins/codex-nest@codex-nest/app/logical_projects)。
 3. 打开项目树，确认显示本机已注册项目，选择项目后打开一条真实聊天。
 4. 新建一个分组，将两个位于不同目录的项目移入分组。重新打开项目树，检查层级和展开状态是否保留。
 
