@@ -1,0 +1,28 @@
+{
+  "name": "codex-nest",
+  "version": "0.4.11",
+  "description": "Organize and manage local Codex projects.",
+  "author": {
+    "name": "Local developer"
+  },
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Codex Nest",
+        "shortDescription": "Browse your Codex projects",
+        "longDescription": "Organize and manage local Codex projects.",
+        "developerName": "Local developer",
+        "category": "Productivity",
+        "capabilities": [
+          "Interactive"
+        ],
+        "defaultPrompt": "Show my local Codex projects in Codex Nest.",
+        "logo": "./assets/nest.svg",
+        "logoDark": "./assets/nest-dark.svg",
+        "composerIcon": "./assets/nest.svg",
+        "composerIconDark": "./assets/nest-dark.svg"
+      }
+    }
+  }
+}
