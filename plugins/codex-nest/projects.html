@@ -269,6 +269,7 @@ let data = null;
 let selected = null;
 let connected = false;
 let loadingProjects = false;
+let refreshQueued = false;
 let openingChat = false;
 let projectEditor = null;
 let editingGroup = null;
@@ -1162,7 +1163,11 @@ byId("move-node").addEventListener("submit", event => {
 });
 
 async function load() {
-  if (!connected || loadingProjects) return;
+  if (!connected) return;
+  if (loadingProjects) {
+    refreshQueued = true;
+    return;
+  }
   loadingProjects = true;
   try {
     if (!receive(await request("tools/call", {name: "logical_projects", arguments: {}}, 20000))) {
@@ -1172,7 +1177,15 @@ async function load() {
     setMessage("status", data ? "refreshFailedWithData" : "refreshFailed");
   } finally {
     loadingProjects = false;
+    if (refreshQueued) {
+      refreshQueued = false;
+      load();
+    }
   }
+}
+
+function refreshVisibleProjects() {
+  if (!document.hidden) load();
 }
 
 applyLocale(navigator.language || "en");
@@ -1180,6 +1193,17 @@ const hasInitialData = receive({structuredContent: JSON.parse(byId("initial-proj
 if (!embedded) {
   if (!hasInitialData) setMessage("status", "openInCodex");
 } else {
+  document.addEventListener("visibilitychange", refreshVisibleProjects);
+  window.addEventListener("focus", refreshVisibleProjects);
+
+  // The host can hide an embedded panel without changing the document's visibility state.
+  let panelVisible;
+  new IntersectionObserver(([entry]) => {
+    const returned = panelVisible === false && entry.isIntersecting;
+    panelVisible = entry.isIntersecting;
+    if (returned) refreshVisibleProjects();
+  }).observe(document.documentElement);
+
   request("ui/initialize", {
     protocolVersion: "2026-01-26",
     appInfo: {name: "codex-nest", version: "0.4.14"},
