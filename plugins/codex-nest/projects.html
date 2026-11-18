@@ -85,6 +85,24 @@ li > ul { margin: 1px 0 2px 11px; padding-left: 5px; border-left: 1px solid var(
   }
 }
 .name.group-name, .name[aria-current="true"] { font-weight: 600; }
+.name[draggable="true"] { cursor: grab; }
+.row.drag-source { opacity: .48; }
+.row.drag-source .project-label-text { animation: none; }
+.row.drop-target, #root-drop.drop-target { outline: 1px solid var(--focus); outline-offset: -1px; background: var(--pressed); }
+#root-drop { display: none; }
+nav.project-dragging #root-drop {
+  display: block;
+  position: sticky;
+  bottom: 0;
+  margin: 8px 0 0;
+  padding: 5px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+  background: var(--sidebar);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
 .toggle, .spacer { flex: 0 0 22px; }
 .toggle { display: grid; place-items: center; padding: 0; color: var(--muted); }
 .toggle:hover:not(:disabled) { color: var(--ink); }
@@ -177,6 +195,7 @@ li > ul { margin: 1px 0 2px 11px; padding-left: 5px; border-left: 1px solid var(
     <button type="submit" data-copy="newGroup">New group</button>
   </form>
   <p id="layout-message" role="status"></p><div id="tree"></div>
+  <div id="root-drop" data-copy="dropAtTop">Move to top level</div>
 </nav>
 <section aria-labelledby="project">
   <h2 id="project" data-copy="chooseProject">Select a project or group</h2>
@@ -230,6 +249,8 @@ try {
   archives = {projects: new Set(stored.archivedProjects || []), chats: new Set(stored.archivedChats || [])};
 } catch {}
 let nodes = new Map();
+const branchViews = new Map();
+let dragSession = null;
 let data = null;
 let selected = null;
 let connected = false;
@@ -244,6 +265,7 @@ const pending = new Map();
 const embedded = window.parent !== window;
 const byId = id => document.getElementById(id);
 const popover = byId("sidebar-popover");
+const sidebar = document.querySelector("nav");
 const copy = {
   projectTree: ["项目树", "Project tree"],
   projects: ["项目", "Projects"],
@@ -268,6 +290,7 @@ const copy = {
   moveTo: ["移动到", "Move to"],
   move: ["移动", "Move"],
   topLevel: ["顶层", "Top level"],
+  dropAtTop: ["移到顶层", "Move to top level"],
   save: ["保存", "Save"],
   cancel: ["取消", "Cancel"],
   close: ["关闭", "Close"],
@@ -522,6 +545,85 @@ function measureProjectLabel(label) {
   label.style.setProperty("--name-duration", `${Math.min(10, Math.max(0.8, distance / 55))}s`);
 }
 
+function startProjectDrag(event, node, row) {
+  if (!event.dataTransfer || savingProject) {
+    event.preventDefault();
+    return;
+  }
+  finishProjectDrag();
+  closeMenu();
+  event.dataTransfer.setData("application/x-codex-nest-project", "project");
+  event.dataTransfer.effectAllowed = "move";
+  dragSession = {id: node.id, row, target: null, preview: new Set(), timer: null};
+  row.classList.add("drag-source");
+  sidebar.classList.add("project-dragging");
+}
+
+function dropParent(element) {
+  const row = element.closest(".row[data-node-id]");
+  const rowId = row?.dataset.nodeId;
+  const groupId = groups.has(rowId) ? rowId : element.closest("ul[data-group-id]")?.dataset.groupId;
+  if (groupId) return canParent(dragSession.id, groupId) ? groupId : null;
+  if (row) return null;
+  return element.closest(".tree-heading, p, form, button, input") ? null : "";
+}
+
+function markDropTarget(parent) {
+  const drag = dragSession;
+  if (!drag || drag.target === parent) return;
+  clearTimeout(drag.timer);
+  const marker = id => id === "" ? byId("root-drop") : branchViews.get(id)?.row;
+  marker(drag.target)?.classList.remove("drop-target");
+  drag.target = parent;
+  marker(parent)?.classList.add("drop-target");
+  const branch = branchViews.get(parent);
+  if (branch?.update && collapsed.has(parent) && !drag.preview.has(parent)) {
+    drag.timer = setTimeout(() => {
+      if (dragSession !== drag || drag.target !== parent) return;
+      drag.preview.add(parent);
+      branch.update();
+    }, 450);
+  }
+}
+
+function finishProjectDrag() {
+  const drag = dragSession;
+  if (!drag) return;
+  markDropTarget(null);
+  clearTimeout(drag.timer);
+  dragSession = null;
+  drag.row.classList.remove("drag-source");
+  sidebar.classList.remove("project-dragging");
+  for (const id of drag.preview) branchViews.get(id)?.update?.();
+}
+
+sidebar.addEventListener("dragover", event => {
+  if (!dragSession) return;
+  const parent = dropParent(event.target);
+  markDropTarget(parent);
+  if (parent !== null) {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  }
+});
+sidebar.addEventListener("drop", event => {
+  if (!dragSession) return;
+  const parent = dropParent(event.target);
+  const id = dragSession.id;
+  finishProjectDrag();
+  if (parent === null) return;
+  event.preventDefault();
+  moveNode(id, parent);
+});
+document.addEventListener("dragover", event => {
+  if (dragSession && !sidebar.contains(event.target)) markDropTarget(null);
+});
+sidebar.addEventListener("dragleave", event => {
+  if (!(event.relatedTarget instanceof Node && sidebar.contains(event.relatedTarget)) &&
+      !sidebar.contains(document.elementFromPoint(event.clientX, event.clientY))) markDropTarget(null);
+});
+document.addEventListener("dragend", finishProjectDrag);
+
 function treeIcon(kind) {
   const namespace = "http://www.w3.org/2000/svg";
   const icon = document.createElementNS(namespace, "svg");
@@ -553,21 +655,28 @@ window.addEventListener("resize", () => {
   }
 });
 
-function renderNodes(nodes) {
+function renderNodes(nodes, groupId) {
   const list = element("ul");
+  if (groupId) list.dataset.groupId = groupId;
   for (const node of [...nodes.values()].sort((a, b) =>
     names.compare(a.label, b.label) || a.id.localeCompare(b.id))) {
     const item = element("li");
     const row = element("div", undefined, "row");
     const button = element("button", undefined, node.project ? "name" : "name group-name");
+    row.dataset.nodeId = node.id;
+    if (!node.project) branchViews.set(node.id, {row});
+    if (node.project) {
+      button.draggable = true;
+      button.addEventListener("dragstart", event => startProjectDrag(event, node, row));
+    }
     let toggleBranch;
     item.append(row);
     if (node.children.size) {
       const toggle = element("button", undefined, "toggle");
-      const children = renderNodes(node.children);
+      const children = renderNodes(node.children, node.id);
       toggle.type = "button";
       function updateBranch() {
-        children.hidden = collapsed.has(node.id);
+        children.hidden = collapsed.has(node.id) && !dragSession?.preview.has(node.id);
         const expanded = String(!children.hidden);
         toggle.setAttribute("aria-label", t(children.hidden ? "expand" : "collapse", {name: node.label}));
         toggle.setAttribute("aria-expanded", expanded);
@@ -579,6 +688,7 @@ function renderNodes(nodes) {
         else next.add(node.id);
         if (saveLayout(groups, parents, next)) updateBranch();
       };
+      branchViews.get(node.id).update = updateBranch;
       updateBranch();
       toggle.addEventListener("click", toggleBranch);
       row.append(toggle);
@@ -880,6 +990,8 @@ function renderDetails() {
 }
 
 function render() {
+  finishProjectDrag();
+  branchViews.clear();
   closeMenu();
   setMessage("status", data.chatSource === "legacy"
     ? "legacyChats" : data.projects.length ? "localProjects" : "noProjects");
@@ -994,16 +1106,19 @@ byId("create-group").addEventListener("submit", event => {
   render();
 });
 
-byId("move-node").addEventListener("submit", event => {
-  event.preventDefault();
-  const parent = byId("parent").value;
-  if (!nodes.has(selected) || (parent && (!nodes.has(parent) || !canParent(selected, parent)))) return;
+function moveNode(id, parent) {
+  if (!nodes.has(id) || (parent && (!nodes.has(parent) || !canParent(id, parent)))) return;
   const nextParents = new Map(parents);
-  if (parent) nextParents.set(selected, parent);
-  else nextParents.delete(selected);
+  if (parent) nextParents.set(id, parent);
+  else nextParents.delete(id);
   const expanded = new Set(collapsed);
   for (let id = parent; id && nodes.has(id); id = nextParents.get(id)) expanded.delete(id);
   if (saveLayout(groups, nextParents, expanded)) render();
+}
+
+byId("move-node").addEventListener("submit", event => {
+  event.preventDefault();
+  moveNode(selected, byId("parent").value);
 });
 
 async function load() {
@@ -1027,7 +1142,7 @@ if (!embedded) {
 } else {
   request("ui/initialize", {
     protocolVersion: "2026-01-26",
-    appInfo: {name: "codex-nest", version: "0.4.11"},
+    appInfo: {name: "codex-nest", version: "0.4.13"},
     appCapabilities: {},
   }).then(result => {
     connected = true;

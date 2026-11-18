@@ -244,7 +244,7 @@ class Server:
             version = params["protocolVersion"]
             return {
                 "protocolVersion": version if version in PROTOCOLS else "2025-11-25",
-                "serverInfo": {"name": "codex-nest", "version": "0.4.11", "icons": TOOL["icons"]},
+                "serverInfo": {"name": "codex-nest", "version": "0.4.13", "icons": TOOL["icons"]},
                 "capabilities": {"tools": {}, "resources": {}},
             }
         if method == "ping":
