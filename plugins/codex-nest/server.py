@@ -141,6 +141,14 @@ def read_remote_projects(home, *, include_chats):
         state = read_local_state(home)
     except API_ERRORS:
         return []
+    host_names = {}
+    for connection in state.get("codex-managed-remote-connections") or []:
+        if not isinstance(connection, dict):
+            continue
+        host = connection.get("hostId")
+        name = connection.get("displayName") or connection.get("alias")
+        if isinstance(host, str) and isinstance(name, str) and name.strip():
+            host_names[host] = name.strip()
     by_host = {}
     records = state.get("remote-projects")
     for entry in records if isinstance(records, list) else []:
@@ -150,7 +158,7 @@ def read_remote_projects(home, *, include_chats):
         if not all(isinstance(value, str) and value for value in (project_id, host, path, label)):
             continue
         by_host.setdefault(host, {})[project_id] = {
-            "id": project_id, "hostId": host, "label": label, "path": path,
+            "id": project_id, "hostId": host, "hostLabel": host_names.get(host), "label": label, "path": path,
             "folders": [path], "chats": [],
         }
     if include_chats and by_host:
@@ -193,6 +201,8 @@ def read_remote_chats(by_host, state):
             for project in projects.values():
                 project["chatError"] = True
             continue
+        for project in projects.values():
+            project["hostReachable"] = True
         for thread in threads:
             chat_id = thread["id"]
             assignment = assignments.get(chat_id)

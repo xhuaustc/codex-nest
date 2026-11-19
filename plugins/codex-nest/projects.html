@@ -17,9 +17,9 @@
   --focus: light-dark(#525252, #d4d4d4);
   --icon-ink: light-dark(#626262, #e1e6ee);
   --icon-active: light-dark(#252525, #f8faff);
-  --remote-ink: light-dark(#304865, #e4eeff);
-  --remote-surface: light-dark(#edf3fa, #2a3c55);
-  --remote-border: light-dark(#bbcbe0, #7389a8);
+  --remote-ink: light-dark(#405871, #c6d4e8);
+  --remote-icon: light-dark(#156992, #79caff);
+  --host-reachable: light-dark(#177445, #50d38b);
 }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -76,18 +76,24 @@ li > ul { margin: 1px 0 2px 11px; padding-left: 5px; border-left: 1px solid var(
 .row button:hover:not(:disabled) { background: transparent; }
 .row .name { display: flex; align-items: flex-start; gap: 7px; flex: 1; min-width: 0; padding: 4px 5px 4px 2px; text-align: left; }
 .name-label { min-width: 0; }
-.remote-label {
-  flex: none;
+.remote-host {
+  display: inline-flex;
+  align-items: center;
   align-self: center;
-  padding: 0 5px;
-  border: 1px solid var(--remote-border);
-  border-radius: 5px;
-  background: var(--remote-surface);
+  gap: 6px;
+  min-width: 0;
+  max-width: 45%;
   color: var(--remote-ink);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
+}
+.remote-host-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
+.remote-host-status { flex: 0 0 7px; height: 7px; border: 1px solid currentColor; border-radius: 50%; }
+.remote-host-status.reachable { color: var(--host-reachable); background: currentColor; }
 .project-label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
 .project-label-text { display: block; overflow: hidden; text-overflow: ellipsis; }
 .name:is(:hover, :focus-visible) .project-label.is-overflowing .project-label-text {
@@ -130,6 +136,7 @@ nav.project-dragging #root-drop {
 .node-icon.group::before { content: ""; position: absolute; top: -3px; left: -1px; width: 5px; height: 2px; border: 1px solid currentColor; border-bottom: 0; border-radius: 2px 2px 0 0; }
 .node-icon.chat::after { content: ""; position: absolute; left: 2px; bottom: -2px; width: 3px; height: 3px; border-left: 1px solid currentColor; }
 .tree-icon { display: block; flex: 0 0 12px; width: 12px; height: 10px; margin-top: 4px; color: var(--icon-ink); }
+.tree-icon .remote-mark { fill: var(--remote-icon); stroke: none; }
 .name:is(:hover, :focus-visible, [aria-current="true"], [aria-expanded="true"]) .tree-icon { color: var(--icon-active); }
 .tree-icon .icon-open { display: none; }
 .name[aria-current="true"] .tree-icon.project .icon-closed,
@@ -377,6 +384,8 @@ const copy = {
   editRemoteProject: ["在 Codex 中编辑远程项目", "Edit remote project in Codex"],
   editRemoteProjectInstructions: ["在 Codex 左侧栏找到「{name}」，从项目菜单选择「编辑项目」。保存后，返回 Nest 查看更新。", "Find “{name}” in the Codex sidebar and choose Edit project from its menu. Save and return to Nest to see the update."],
   remoteProject: ["远程", "Remote"],
+  remoteHostReachable: ["Nest 已连通远程主机", "Remote host reachable from Nest"],
+  remoteHostUnverified: ["Nest 尚未确认远程主机连接", "Remote host connection not verified by Nest"],
   sourceDevice: ["来源设备", "Source device"],
   thisComputer: ["此电脑", "This computer"],
   remoteDevices: ["远程设备", "Remote devices"],
@@ -750,7 +759,7 @@ sidebar.addEventListener("dragleave", event => {
 });
 document.addEventListener("dragend", finishProjectDrag);
 
-function treeIcon(kind) {
+function treeIcon(kind, remote = false) {
   const namespace = "http://www.w3.org/2000/svg";
   const icon = document.createElementNS(namespace, "svg");
   icon.setAttribute("class", "tree-icon " + kind);
@@ -772,7 +781,28 @@ function treeIcon(kind) {
     ? "M1.5 10.5V2.25Q1.5 1 2.75 1h3.1l1.5 1.75h4.6Q13.2 2.75 13.2 4v1.2M1.5 10.5h10.7l2.3-5.3H4.25Z"
     : closed.getAttribute("d") + "M4.2 6.4h7.6m-7.6 2h4.5");
   icon.append(closed, open);
+  if (remote) {
+    const mark = document.createElementNS(namespace, "circle");
+    mark.setAttribute("class", "remote-mark");
+    mark.setAttribute("cx", "13.6");
+    mark.setAttribute("cy", "9.5");
+    mark.setAttribute("r", "2.4");
+    icon.append(mark);
+  }
   return icon;
+}
+
+function remoteHostLabel(project) {
+  const host = project.hostLabel || t("remoteProject");
+  const metadata = element("span", undefined, "remote-host");
+  metadata.title = host;
+  const status = element("span", undefined, "remote-host-status");
+  status.classList.toggle("reachable", Boolean(project.hostReachable));
+  status.title = t(project.hostReachable ? "remoteHostReachable" : "remoteHostUnverified");
+  status.setAttribute("role", "img");
+  status.setAttribute("aria-label", status.title);
+  metadata.append(element("span", host, "remote-host-name"), status);
+  return metadata;
 }
 
 window.addEventListener("resize", () => {
@@ -824,8 +854,9 @@ function renderNodes(nodes, groupId) {
     }
     const label = element("span", undefined, "project-label");
     label.append(element("span", node.label, "project-label-text"));
-    button.append(treeIcon(node.project ? "project" : "group"), label);
-    if (node.project?.hostId) button.append(element("span", t("remoteProject"), "remote-label"));
+    const remote = Boolean(node.project?.hostId);
+    button.append(treeIcon(node.project ? "project" : "group", remote), label);
+    if (remote) button.append(remoteHostLabel(node.project));
     button.addEventListener("pointerenter", () => measureProjectLabel(label));
     button.addEventListener("focus", () => measureProjectLabel(label));
     button.type = "button";
@@ -912,7 +943,7 @@ function openProjectMenu(anchor, project) {
     (project.hostId ? Boolean(project.chatError) : data.chatSource !== "codex");
   if (project.hostId) {
     const edit = menuAction(t("editRemoteProject"), () => showRemoteProjectHandoff(project));
-    items.push(element("p", t("remoteProject"), "popover-meta"),
+    items.push(element("p", project.hostLabel || t("remoteProject"), "popover-meta"),
       element("p", project.path, "popover-meta"), element("div", undefined, "popover-divider"), edit, archive, hide);
     openMenu(anchor, items);
     return;
