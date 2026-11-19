@@ -71,6 +71,7 @@ li > ul { margin: 1px 0 2px 11px; padding-left: 5px; border-left: 1px solid var(
 .row button:hover:not(:disabled) { background: transparent; }
 .row .name { display: flex; align-items: flex-start; gap: 7px; flex: 1; min-width: 0; padding: 4px 5px 4px 2px; text-align: left; }
 .name-label { min-width: 0; }
+.remote-label { flex: none; color: var(--muted); font-size: 11px; }
 .project-label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
 .project-label-text { display: block; overflow: hidden; text-overflow: ellipsis; }
 .name:is(:hover, :focus-visible) .project-label.is-overflowing .project-label-text {
@@ -159,7 +160,14 @@ nav.project-dragging #root-drop {
 .editor input, .editor textarea { color: inherit; background: var(--surface); font: inherit; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; width: 100%; }
 .editor textarea { min-height: 75px; resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; }
 .editor textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-#project-action-status:not(:empty) { margin: 9px 0; color: var(--muted); font-size: 12px; }
+.project-source { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 10px; }
+.project-source select, #project-group { width: 100%; color: inherit; background: var(--surface); padding: 4px 7px; }
+.project-source-field { display: grid; gap: 5px; }
+.project-source-field[hidden] { display: none; }
+.editor-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+#save-project { background: var(--ink); color: var(--surface); }
+#save-project:hover:not(:disabled) { opacity: .85; }
+#project-action-status:not(:empty), #project-home-status:not(:empty) { margin: 9px 0; color: var(--muted); font-size: 12px; }
 #conversations { margin-top: 22px; }
 .chat-row { gap: 7px; padding: 5px 8px; border: 0; text-align: start; overflow-wrap: anywhere; }
 #new-chat { max-width: 100%; margin: 8px 0 4px; background: var(--sidebar); font-weight: 600; }
@@ -171,6 +179,14 @@ nav.project-dragging #root-drop {
   background: linear-gradient(currentColor, currentColor) center / 10px 1px no-repeat,
     linear-gradient(currentColor, currentColor) center / 1px 10px no-repeat;
 }
+#chat-search {
+  display: block;
+  width: min(100%, 320px);
+  margin: 4px 0 6px;
+  padding: 5px 8px;
+  background: var(--surface);
+}
+#chat-search::placeholder { color: var(--muted); }
 #chats { margin-top: 0; }
 #chats .chat-row { min-width: 0; flex: 1; align-items: flex-start; background: transparent; text-decoration: none; }
 #chats .chat-row:hover { background: var(--pressed); }
@@ -198,7 +214,8 @@ nav.project-dragging #root-drop {
 <nav data-copy-label="projectTree">
   <div class="tree-heading"><h2 data-copy="projects">Projects</h2><div class="sidebar-actions">
     <button id="sidebar-menu" type="button" class="icon-action" data-copy-label="sidebarActions" data-copy-title="sidebarActions" aria-expanded="false" aria-controls="sidebar-popover" disabled>…</button>
-    <button id="new-project" type="button" class="icon-action" data-copy-label="newProject" data-copy-title="newProject" disabled>＋</button>
+    <button id="new-project" type="button" class="icon-action" data-copy-label="newProject" data-copy-title="newProject"
+      aria-haspopup="dialog" aria-controls="editor-dialog" disabled>＋</button>
   </div></div>
   <p id="status" role="status" data-copy="loading">Loading…</p>
   <form id="create-group" class="controls" novalidate hidden>
@@ -211,12 +228,15 @@ nav.project-dragging #root-drop {
 <section aria-labelledby="project">
   <h2 id="project" data-copy="chooseProject">Select a project or group</h2>
   <p id="project-action-status" role="status"></p>
+  <p id="project-home-status" role="status"></p>
   <form id="move-node" class="controls" hidden>
     <label for="parent" data-copy="moveTo">Move to</label><select id="parent"></select><button type="submit" data-copy="move">Move</button>
   </form>
   <div id="conversations" hidden>
     <h3 data-copy="chats">Chats</h3>
     <button id="new-chat" class="row chat-row" type="button" data-copy="newChat" disabled>New chat</button>
+    <input id="chat-search" type="search" autocomplete="off" data-copy-label="searchChats"
+      data-copy-placeholder="searchChats" aria-controls="chats">
     <p id="hint" role="status"></p><ul id="chats"></ul>
   </div>
 </section>
@@ -226,10 +246,36 @@ nav.project-dragging #root-drop {
   <form id="project-editor" class="editor" novalidate>
     <h3 id="editor-title"></h3>
     <label for="project-name" data-copy="projectName">Project name</label><input id="project-name" required>
-    <label for="project-folders" data-copy="foldersLabel">Working directories (one existing folder per line)</label>
-    <textarea id="project-folders" required spellcheck="false" placeholder="~/work/project"></textarea>
+    <div class="project-source">
+      <div id="project-device-field" class="project-source-field">
+        <label for="project-device" data-copy="sourceDevice">Source device</label>
+        <select id="project-device"></select>
+      </div>
+      <div id="local-project-folders" class="project-source-field">
+        <label for="project-folders" data-copy="foldersLabel">Working directories (one existing folder per line)</label>
+        <textarea id="project-folders" spellcheck="false" placeholder="~/work/project"></textarea>
+      </div>
+      <div id="remote-project-folder" class="project-source-field" hidden>
+        <label for="project-remote-path" data-copy="remoteDirectory">Remote directory</label>
+        <input id="project-remote-path" placeholder="/home/user/project" spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+    <div id="project-group-field" class="project-source-field">
+      <label for="project-group" data-copy="projectGroup">Group</label>
+      <select id="project-group"></select>
+    </div>
     <p id="editor-error" class="popover-error" role="status"></p>
-    <div><button id="save-project" type="submit" data-copy="save">Save</button> <button id="cancel-project" type="button" data-copy="cancel">Cancel</button></div>
+    <div class="editor-footer"><button id="cancel-project" type="button" data-copy="cancel">Cancel</button>
+      <button id="save-project" type="submit">Create project</button></div>
+  </form>
+</dialog>
+<dialog id="remote-project-dialog" class="editor-dialog" aria-labelledby="remote-project-title">
+  <form method="dialog" class="editor">
+    <h3 id="remote-project-title" data-copy="editRemoteProject">Edit remote project in Codex</h3>
+    <p id="remote-project-instructions"></p>
+    <p id="remote-project-error" role="status"></p>
+    <div><button id="open-codex-home" type="button" data-copy="openCodexHome">Open Codex Home</button>
+      <button data-copy="close">Close</button></div>
   </form>
 </dialog>
 <dialog id="group-dialog" class="editor-dialog" aria-labelledby="group-editor-title">
@@ -244,8 +290,16 @@ nav.project-dragging #root-drop {
 <dialog id="archive-dialog" class="editor-dialog" aria-labelledby="archive-title">
   <div class="archive-heading"><h2 id="archive-title" data-copy="archive">Archive</h2><form method="dialog"><button data-copy="close">Close</button></form></div>
   <p id="archive-status" role="status"></p>
-  <div id="archived-projects" class="archive-kind" hidden><h3 data-copy="projects">Projects</h3><ul></ul></div>
+  <div id="archived-projects" class="archive-kind" hidden><h3 data-copy="hiddenProjects">Projects hidden in Nest</h3><ul></ul></div>
   <div id="archived-chats" class="archive-kind" hidden><h3 data-copy="chats">Chats</h3><ul></ul></div>
+</dialog>
+<dialog id="project-archive-dialog" class="editor-dialog" aria-labelledby="project-archive-title">
+  <form id="project-archive-form" class="editor">
+    <h3 id="project-archive-title" data-copy="archiveProjectChats">Archive project chats</h3>
+    <p id="project-archive-summary"></p>
+    <div><button type="submit" data-copy="archive">Archive</button>
+      <button id="cancel-project-archive" type="button" data-copy="cancel">Cancel</button></div>
+  </form>
 </dialog>
 <script type="application/json" id="initial-projects">{}</script>
 <script>
@@ -267,6 +321,7 @@ const branchViews = new Map();
 let dragSession = null;
 let data = null;
 let selected = null;
+let chatSearchProject = null;
 let connected = false;
 let loadingProjects = false;
 let refreshQueued = false;
@@ -274,6 +329,8 @@ let openingChat = false;
 let projectEditor = null;
 let editingGroup = null;
 let savingProject = false;
+let archiveTarget = null;
+let archivingProject = false;
 let menuAnchor = null;
 let menuPoint = null;
 let sequence = 0;
@@ -289,6 +346,8 @@ const copy = {
   group: ["分组", "Group"],
   chats: ["聊天", "Chats"],
   newChat: ["新建聊天", "New chat"],
+  searchChats: ["搜索聊天标题", "Search chat titles"],
+  noMatchingChats: ["没有匹配的聊天。", "No matching chats."],
   primaryUnavailable: ["项目的 Primary 目录不可用。", "The primary project directory is unavailable."],
   sidebarActions: ["项目区操作", "Project sidebar actions"],
   projectActions: ["项目操作", "Project actions"],
@@ -297,7 +356,25 @@ const copy = {
   namedGroupActions: ["{name}的分组操作", "Group actions for {name}"],
   namedChatActions: ["{name}的聊天操作", "Chat actions for {name}"],
   newProject: ["新建项目", "New project"],
-  newProjectIn: ["新建项目 · {name}", "New project · {name}"],
+  editRemoteProject: ["在 Codex 中编辑远程项目", "Edit remote project in Codex"],
+  editRemoteProjectInstructions: ["在 Codex 左侧栏找到「{name}」，从项目菜单选择「编辑项目」。保存后，返回 Nest 查看更新。", "Find “{name}” in the Codex sidebar and choose Edit project from its menu. Save and return to Nest to see the update."],
+  remoteProject: ["远程", "Remote"],
+  sourceDevice: ["来源设备", "Source device"],
+  thisComputer: ["此电脑", "This computer"],
+  remoteDevices: ["远程设备", "Remote devices"],
+  projectGroup: ["所属分组", "Group"],
+  remoteDirectory: ["远程目录", "Remote directory"],
+  createProject: ["创建项目", "Create project"],
+  creatingRemoteProject: ["正在验证目录并等待 Codex 注册。如果 Codex 弹出目录访问确认，请在弹窗中确认。", "Verifying the directory and waiting for Codex to register it. Confirm folder access if Codex prompts."],
+  remoteAlreadyRegistered: ["该主机上的这个目录已注册为项目。", "This folder is already registered as a project on the selected host."],
+  remoteHostUnavailable: ["该 SSH 主机在 Codex 中不可用。请刷新项目后重试。", "This SSH host is unavailable in Codex. Refresh projects and try again."],
+  remotePathRequired: ["请输入远程主机上的绝对目录路径。", "Enter an absolute directory path on the remote host."],
+  remotePathUnavailable: ["无法确认该远程目录。请检查 SSH 连接和路径。", "Could not verify the remote directory. Check the SSH connection and path."],
+  desktopConfigBusy: ["Codex 桌面已有设置文件。请等现有设置操作完成后再试。", "A Codex desktop setup file already exists. Finish the existing setup before retrying."],
+  remoteRegistrationUnconfirmed: ["尚未收到 Codex 注册确认。重试前请先刷新列表。", "Codex did not confirm registration. Refresh the list before retrying."],
+  openCodexHome: ["打开 Codex 首页", "Open Codex Home"],
+  openCodexHomeFailed: ["无法打开 Codex 首页。请从 Codex 左侧栏继续。", "Could not open Codex Home. Continue from the Codex sidebar."],
+  remoteChatUnavailable: ["请在 Codex 中开启远程项目聊天。", "Start remote project chats in Codex."],
   newGroup: ["新建分组", "New group"],
   editProject: ["编辑项目", "Edit project"],
   editGroup: ["编辑分组", "Edit group"],
@@ -313,7 +390,13 @@ const copy = {
   cancel: ["取消", "Cancel"],
   close: ["关闭", "Close"],
   archive: ["归档", "Archive"],
-  archiveProject: ["归档项目", "Archive project"],
+  hideProject: ["在 Nest 中隐藏项目", "Hide project in Nest"],
+  hiddenProjects: ["在 Nest 中隐藏的项目", "Projects hidden in Nest"],
+  archiveProjectChats: ["归档项目内聊天", "Archive project chats"],
+  archiveProjectChatsConfirm: ["将「{name}」里的 {count} 条聊天归档到 Codex。项目会保留，正在运行的聊天可能会停止。", "Archive {count} chats in “{name}” in Codex. The project stays available. Running chats may stop."],
+  archiveProjectChatsDone: ["Codex 已归档 {count} 条聊天。", "Codex archived {count} chats."],
+  archiveProjectChatsUnavailable: ["无法确认项目中可归档的聊天。请刷新后重试。", "Could not verify which chats can be archived. Refresh and try again."],
+  archiveProjectChatsIncomplete: ["Codex 已确认归档 {count} 条聊天。其余结果请刷新确认。", "Codex confirmed {count} archived chats. Refresh to check the rest."],
   archiveChat: ["归档聊天", "Archive chat"],
   restore: ["恢复", "Restore"],
   restoreNamed: ["恢复 {name}", "Restore {name}"],
@@ -332,16 +415,18 @@ const copy = {
   loading: ["正在加载…", "Loading…"],
   refreshProjects: ["刷新项目", "Refresh projects"],
   readProjectsFailed: ["无法读取本机 Codex 项目记录。", "Could not read local Codex projects."],
-  localProjects: ["本机已注册项目", "Registered local projects"],
-  noProjects: ["暂无本机项目", "No local projects"],
+  localProjects: ["已注册项目", "Registered projects"],
+  noProjects: ["暂无项目", "No projects"],
   legacyChats: ["聊天同步暂不可用，正在显示本地索引", "Chat sync unavailable. Showing the local index."],
   chatsNeedConnection: ["聊天列表需要连接 Codex 后加载。", "Connect to Codex to load chats."],
+  remoteChatsUnavailable: ["暂时无法同步远程聊天。请检查 SSH 连接后刷新项目。", "Could not sync remote chats. Check the SSH connection and refresh projects."],
   noActiveChats: ["暂无未归档的聊天。", "No unarchived chats."],
   projectManagementRequired: ["需要连接支持项目管理的 Codex 桌面端。", "Connect to a Codex desktop version that supports project management."],
   actionTimeout: ["Codex 未完成请求。请刷新确认结果后再试。", "Codex did not complete the request. Refresh to check the result before retrying."],
   noActionResult: ["Codex 没有返回操作结果。", "Codex did not return an operation result."],
   noSavedProject: ["Codex 没有返回保存后的项目。请刷新确认。", "Codex did not return the saved project. Refresh to check the result."],
-  projectSaved: ["项目已保存。", "Project saved."],
+  projectSaved: ["已保存到 Codex 项目库。", "Saved to the Codex project registry."],
+  homeProjectOutdated: ["Codex Home 仍显示旧的项目信息。若要立即同步，请在 Home 的项目菜单中编辑并保存。", "Codex Home still shows the old project details. To sync now, edit and save the project from its menu in Home."],
   projectCreated: ["项目已创建。", "Project created."],
   refreshFailedWithData: ["本机已注册项目（刷新失败）", "Registered local projects (refresh failed)"],
   refreshFailed: ["无法刷新项目。", "Could not refresh projects."],
@@ -389,6 +474,7 @@ function applyLocale(locale) {
     }
   }
   const savedCopy = new Map(liveCopy);
+  if (savedCopy.get("hint")?.[0] === "noMatchingChats") savedCopy.delete("hint");
   if (data) render();
   for (const [id, args] of savedCopy) setMessage(id, ...args);
 }
@@ -480,6 +566,10 @@ function receive(result) {
     return true;
   }
   if (!Array.isArray(snapshot?.projects)) return false;
+  if (data && JSON.stringify(snapshot) === JSON.stringify(data)) {
+    renderProjectStatus();
+    return true;
+  }
   data = snapshot;
   render();
   return true;
@@ -717,6 +807,7 @@ function renderNodes(nodes, groupId) {
     const label = element("span", undefined, "project-label");
     label.append(element("span", node.label, "project-label-text"));
     button.append(treeIcon(node.project ? "project" : "group"), label);
+    if (node.project?.hostId) button.append(element("span", t("remoteProject"), "remote-label"));
     button.addEventListener("pointerenter", () => measureProjectLabel(label));
     button.addEventListener("focus", () => measureProjectLabel(label));
     button.type = "button";
@@ -797,6 +888,17 @@ function menuAction(label, action, iconType) {
 
 function openProjectMenu(anchor, project) {
   const items = [element("h3", project.label, "popover-heading")];
+  const hide = menuAction(t("hideProject"), () => updateArchive("projects", project.id, true));
+  const archive = menuAction(t("archiveProjectChats"), () => confirmProjectArchive(project));
+  archive.disabled = !connected || data.initial || archivingProject || !project.chats.length ||
+    (project.hostId ? Boolean(project.chatError) : data.chatSource !== "codex");
+  if (project.hostId) {
+    const edit = menuAction(t("editRemoteProject"), () => showRemoteProjectHandoff(project));
+    items.push(element("p", t("remoteProject"), "popover-meta"),
+      element("p", project.path, "popover-meta"), element("div", undefined, "popover-divider"), edit, archive, hide);
+    openMenu(anchor, items);
+    return;
+  }
   if (!data.initial) {
     const count = project.chats.filter(chat => !archives.chats.has(chat.id)).length;
     items.push(element("p", t(count === 1 ? "oneChat" : "chatCount", {count}), "popover-meta"));
@@ -828,8 +930,7 @@ function openProjectMenu(anchor, project) {
     showProjectEditor(project);
   });
   edit.disabled = !enabled;
-  const archive = menuAction(t("archiveProject"), () => updateArchive("projects", project.id, true));
-  items.push(element("div", undefined, "popover-divider"), edit, archive, error);
+  items.push(element("div", undefined, "popover-divider"), edit, archive, hide, error);
   openMenu(anchor, items);
 }
 
@@ -870,6 +971,23 @@ function showCreateGroup() {
   byId("group-name").focus();
 }
 
+function showRemoteProjectHandoff(project) {
+  closeMenu(true);
+  setMessage("remote-project-instructions", "editRemoteProjectInstructions", {name: project.label});
+  setMessage("remote-project-error");
+  byId("open-codex-home").disabled = !connected;
+  byId("remote-project-dialog").showModal();
+}
+
+byId("open-codex-home").addEventListener("click", async () => {
+  try {
+    await request("ui/open-link", {url: "codex://threads/new"});
+    byId("remote-project-dialog").close();
+  } catch {
+    setMessage("remote-project-error", "openCodexHomeFailed");
+  }
+});
+
 byId("sidebar-menu").addEventListener("click", () => {
   const addGroup = menuAction(t("newGroup"), showCreateGroup);
   const refreshProjects = menuAction(t("refreshProjects"), () => { closeMenu(true); load(); });
@@ -884,10 +1002,10 @@ byId("sidebar-menu").addEventListener("click", () => {
 document.querySelector("nav").addEventListener("contextmenu", event => {
   if (!data || event.target.closest(".row, .tree-heading, p, form, button, input")) return;
   event.preventDefault();
-  const newProject = menuAction(t("newProject"), () => showProjectEditor(null), "project");
-  newProject.disabled = byId("new-project").disabled;
+  const create = menuAction(t("createProject"), () => showProjectEditor(null), "project");
+  create.disabled = !canCreateProject();
   openMenu(byId("sidebar-menu"), [
-    newProject, menuAction(t("newGroup"), showCreateGroup, "group"),
+    create, menuAction(t("newGroup"), showCreateGroup, "group"),
   ], {x: event.clientX, y: event.clientY});
 });
 document.addEventListener("pointerdown", event => {
@@ -906,7 +1024,8 @@ document.querySelector("nav").addEventListener("scroll", () => closeMenu());
 
 function chatLink(chat, className) {
   const link = element("a", undefined, className);
-  link.href = "codex://threads/" + encodeURIComponent(chat.id);
+  link.href = "codex://threads/" + encodeURIComponent(chat.id) +
+    (chat.hostId ? "?hostId=" + encodeURIComponent(chat.hostId) : "");
   link.addEventListener("click", async event => {
     if (!embedded) return;
     event.preventDefault();
@@ -966,10 +1085,43 @@ function updateArchive(kind, id, archived) {
   render();
 }
 
+function confirmProjectArchive(project) {
+  closeMenu(true);
+  const {id, hostId, label, chats} = project;
+  archiveTarget = {projectId: id, hostId, chatIds: chats.map(chat => chat.id)};
+  setMessage("project-archive-summary", "archiveProjectChatsConfirm", {name: label, count: chats.length});
+  byId("project-archive-dialog").showModal();
+}
+
+byId("cancel-project-archive").addEventListener("click", () => byId("project-archive-dialog").close());
+byId("project-archive-dialog").addEventListener("cancel", event => {
+  if (archivingProject) event.preventDefault();
+});
+byId("project-archive-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (archivingProject || !archiveTarget) return;
+  archivingProject = true;
+  const buttons = [...event.currentTarget.querySelectorAll("button")];
+  for (const button of buttons) button.disabled = true;
+  try {
+    const result = await runProjectAction("archive_project_chats", archiveTarget);
+    setMessage("layout-message", "archiveProjectChatsDone", {count: result.archivedCount});
+  } catch (error) {
+    showError("layout-message", error);
+  } finally {
+    archiveTarget = null;
+    archivingProject = false;
+    for (const button of buttons) button.disabled = false;
+    byId("project-archive-dialog").close();
+    load();
+  }
+});
+
 function renderDetails() {
   const node = nodes.get(selected);
   const project = node?.project;
   byId("project").textContent = node?.label ?? t("chooseProject");
+  setMessage("project-home-status", project?.homeSync === false ? "homeProjectOutdated" : null);
   byId("move-node").hidden = !node;
   if (node) {
     const select = byId("parent");
@@ -983,14 +1135,28 @@ function renderDetails() {
     const parent = parents.get(node.id);
     select.value = destinations.some(item => item.id === parent) ? parent : "";
   }
-  const activeChats = project?.chats.filter(chat => !archives.chats.has(chat.id)) ?? [];
-  setMessage("hint", project && !activeChats.length
-    ? data.initial ? "chatsNeedConnection" : "noActiveChats" : null);
-  const chats = byId("chats");
-  chats.replaceChildren();
+  const projectId = project?.id ?? null;
+  if (chatSearchProject !== projectId) {
+    byId("chat-search").value = "";
+    chatSearchProject = projectId;
+  }
   byId("conversations").hidden = !project;
   updateNewChat(project);
-  for (const chat of activeChats) {
+  renderChatList(project);
+}
+
+function renderChatList(project) {
+  const activeChats = project?.chats.filter(chat => !archives.chats.has(chat.id)) ?? [];
+  const query = byId("chat-search").value.trim().normalize().toLocaleLowerCase(language);
+  const visibleChats = activeChats.filter(chat => chatTitle(chat).normalize().toLocaleLowerCase(language).includes(query));
+  let hint = null;
+  if (project?.chatError) hint = "remoteChatsUnavailable";
+  else if (project && !activeChats.length) hint = data.initial ? "chatsNeedConnection" : "noActiveChats";
+  else if (query && !visibleChats.length) hint = "noMatchingChats";
+  setMessage("hint", hint);
+  const chats = byId("chats");
+  chats.replaceChildren();
+  for (const chat of visibleChats) {
     const li = element("li", undefined, "row");
     const link = chatLink(chat, "row chat-row");
     const icon = element("span", undefined, "node-icon chat");
@@ -1008,10 +1174,15 @@ function renderDetails() {
   }
 }
 
+byId("chat-search").addEventListener("input", () => {
+  closeMenu();
+  renderChatList(nodes.get(selected)?.project);
+});
+
 function updateNewChat(project) {
   const button = byId("new-chat");
-  button.disabled = openingChat || !connected || !data?.canManage || !project?.nativeId || !project.path;
-  button.title = t(project && !project.path ? "primaryUnavailable" : "newChat");
+  button.disabled = openingChat || !connected || !data?.canManage || !project?.nativeId || !project.path || Boolean(project.hostId);
+  button.title = t(project?.hostId ? "remoteChatUnavailable" : project && !project.path ? "primaryUnavailable" : "newChat");
 }
 
 byId("new-chat").addEventListener("click", async () => {
@@ -1030,15 +1201,18 @@ byId("new-chat").addEventListener("click", async () => {
   }
 });
 
+function renderProjectStatus() {
+  setMessage("status", data.chatSource === "legacy"
+    ? "legacyChats" : data.projects.length ? "localProjects" : "noProjects");
+}
+
 function render() {
   finishProjectDrag();
   branchViews.clear();
   closeMenu();
-  setMessage("status", data.chatSource === "legacy"
-    ? "legacyChats" : data.projects.length ? "localProjects" : "noProjects");
+  renderProjectStatus();
   const create = byId("new-project");
-  create.disabled = savingProject || !connected || !data.canManage;
-  create.title = t(!connected || !data.canManage ? "projectManagementRequired" : "newProject");
+  create.disabled = !canCreateProject();
   byId("sidebar-menu").disabled = false;
   const projects = data.projects.filter(project => !archives.projects.has(project.id));
   byId("tree").replaceChildren(renderNodes(buildTree(projects)));
@@ -1046,11 +1220,11 @@ function render() {
   if (byId("archive-dialog").open) renderArchive();
 }
 
-async function runProjectAction(name, arguments_) {
+async function runProjectAction(name, arguments_, timeout = 26000) {
   setMessage("project-action-status");
   let reply;
   try {
-    reply = await request("tools/call", {name, arguments: arguments_}, 26000);
+    reply = await request("tools/call", {name, arguments: arguments_}, timeout);
   } catch {
     throw new InterfaceError("actionTimeout");
   }
@@ -1062,20 +1236,63 @@ async function runProjectAction(name, arguments_) {
   return reply.structuredContent;
 }
 
+function canCreateProject() {
+  return connected && !savingProject && (data?.canManage || Boolean(data?.remoteHosts?.length));
+}
+
+function updateProjectSource() {
+  const isRemote = Boolean(byId("project-device").value);
+  byId("local-project-folders").hidden = isRemote;
+  byId("remote-project-folder").hidden = !isRemote;
+}
+
+function projectGroupOptions() {
+  return [...groups].map(([id, label]) => {
+    const trail = [label];
+    for (let parent = parents.get(id); groups.has(parent); parent = parents.get(parent)) {
+      trail.unshift(groups.get(parent));
+    }
+    return new Option(trail.join(" / "), id);
+  }).sort((a, b) => names.compare(a.text, b.text));
+}
+
 function showProjectEditor(project) {
-  if (savingProject || !connected || !data?.canManage) return;
+  if (project ? savingProject || !connected || !data?.canManage : !canCreateProject()) return;
   closeMenu(true);
-  const group = groups.has(selected) ? selected : null;
-  projectEditor = {project, group, attempt: null};
+  projectEditor = {project, attempt: null};
   setMessage("project-action-status");
   setMessage("editor-error");
-  setMessage("editor-title", project ? "editProject" : group ? "newProjectIn" : "newProject", {name: groups.get(group)});
+  setMessage("editor-title", project ? "editProject" : "createProject");
+  setMessage("save-project", project ? "save" : "createProject");
   byId("project-name").value = project?.label ?? "";
   byId("project-folders").value = project?.folders.join("\n") ?? "";
+  byId("project-remote-path").value = "";
+  byId("project-device-field").hidden = Boolean(project);
+  byId("project-group-field").hidden = Boolean(project);
+  const device = byId("project-device");
+  const local = new Option(t("thisComputer"), "");
+  local.dataset.copy = "thisComputer";
+  local.disabled = !data.canManage;
+  device.replaceChildren(local);
+  const hosts = data.remoteHosts ?? [];
+  if (!project && hosts.length) {
+    const remotes = element("optgroup");
+    remotes.label = t("remoteDevices");
+    for (const host of hosts) remotes.append(new Option(host.label, host.id));
+    device.append(remotes);
+  }
+  device.value = data.canManage ? "" : hosts[0].id;
+  const group = byId("project-group");
+  const top = new Option(t("topLevel"), "");
+  top.dataset.copy = "topLevel";
+  group.replaceChildren(top, ...projectGroupOptions());
+  group.value = groups.has(selected) ? selected : "";
+  updateProjectSource();
   byId("editor-dialog").showModal();
   byId("project-name").focus();
 }
 
+byId("project-device").addEventListener("change", updateProjectSource);
 byId("new-project").addEventListener("click", () => showProjectEditor(null));
 function closeProjectEditor() {
   if (byId("editor-dialog").open) byId("editor-dialog").close();
@@ -1090,44 +1307,55 @@ byId("editor-dialog").addEventListener("cancel", event => {
 byId("project-editor").addEventListener("submit", async event => {
   event.preventDefault();
   const editor = projectEditor;
-  if (!editor || savingProject || !connected || !data.canManage) return;
+  if (!editor || savingProject || !connected) return;
+  const hostId = editor.project ? "" : byId("project-device").value;
+  const group = byId("project-group").value;
+  const path = byId("project-remote-path").value.trim();
+  if (!hostId && !data.canManage) return;
   const fields = {
     name: byId("project-name").value.trim(),
     folders: byId("project-folders").value.split("\n").map(line => line.trim()).filter(Boolean),
   };
-  if (!fields.name || !fields.folders.length) {
-    setMessage("editor-error", fields.name ? "folderRequired" : "projectNameRequired");
+  if (!fields.name || (hostId ? !path : !fields.folders.length)) {
+    setMessage("editor-error", !fields.name ? "projectNameRequired" : hostId ? "remotePathRequired" : "folderRequired");
     return;
   }
-  const signature = JSON.stringify(fields);
-  if (editor.attempt?.signature !== signature) {
-    editor.attempt = {signature, id: Array.from(crypto.getRandomValues(new Uint32Array(4))).join("-")};
+  if (!hostId && !editor.project) {
+    const signature = JSON.stringify(fields);
+    if (editor.attempt?.signature !== signature) {
+      editor.attempt = {signature, id: Array.from(crypto.getRandomValues(new Uint32Array(4))).join("-")};
+    }
   }
-  const controls = [...byId("project-editor").querySelectorAll("button, input, textarea"), byId("new-project")];
+  const controls = [...event.currentTarget.querySelectorAll("button, input, textarea, select"), byId("new-project")];
   savingProject = true;
   for (const control of controls) control.disabled = true;
+  setMessage("editor-error", hostId ? "creatingRemoteProject" : null);
   try {
-    const result = await runProjectAction(editor.project ? "edit_project" : "create_project", editor.project
-      ? {...fields, projectId: editor.project.nativeId} : {...fields, requestId: editor.attempt.id});
+    const result = hostId
+      ? await runProjectAction("create_remote_project", {hostId, name: fields.name, path}, 80000)
+      : await runProjectAction(editor.project ? "edit_project" : "create_project", editor.project
+        ? {...fields, projectId: editor.project.nativeId} : {...fields, requestId: editor.attempt.id});
     const project = result.project;
     if (!project) throw new InterfaceError("noSavedProject");
     const previous = data.projects.find(item => item.id === project.id);
     if (previous) project.chats = previous.chats;
     data.projects = [...data.projects.filter(item => item.id !== project.id), project];
     selected = "project:" + project.id;
-    if (!editor.project && editor.group && groups.has(editor.group)) {
+    if (!editor.project && !result.alreadyRegistered && groups.has(group)) {
       const expanded = new Set(collapsed);
-      for (let id = editor.group; id; id = parents.get(id)) expanded.delete(id);
-      saveLayout(groups, new Map(parents).set(selected, editor.group), expanded);
+      for (let id = group; id; id = parents.get(id)) expanded.delete(id);
+      saveLayout(groups, new Map(parents).set(selected, group), expanded);
     }
     closeProjectEditor();
-    setMessage("project-action-status", editor.project ? "projectSaved" : "projectCreated");
+    setMessage("project-action-status", editor.project ? "projectSaved" : result.alreadyRegistered
+      ? "remoteAlreadyRegistered" : "projectCreated");
   } catch (error) {
     showError("editor-error", error);
   } finally {
     savingProject = false;
     for (const control of controls) control.disabled = false;
     render();
+    if (!projectEditor || refreshQueued) load();
   }
 });
 
@@ -1164,10 +1392,11 @@ byId("move-node").addEventListener("submit", event => {
 
 async function load() {
   if (!connected) return;
-  if (loadingProjects) {
+  if (loadingProjects || savingProject) {
     refreshQueued = true;
     return;
   }
+  refreshQueued = false;
   loadingProjects = true;
   try {
     if (!receive(await request("tools/call", {name: "logical_projects", arguments: {}}, 20000))) {

@@ -19,12 +19,13 @@ class ProjectAPIError(Exception):
 
 
 class AppServer:
-    def __init__(self, command=None, timeout=8):
+    def __init__(self, command=None, timeout=8, deadline=None):
         binary = str(DESKTOP_CODEX) if DESKTOP_CODEX.is_file() else shutil.which("codex")
         if command is None and binary is None:
             raise ProjectAPIError("missingAppServer", "Codex app-server could not be found.")
         self.command = command if command is not None else [binary, "app-server", "--stdio"]
         self.timeout = timeout
+        self.deadline = deadline
         self.next_id = 0
         self.buffer = b""
 
@@ -66,6 +67,8 @@ class AppServer:
         request_id = self.next_id
         self.send({"id": request_id, "method": method, "params": params})
         deadline = time.monotonic() + self.timeout
+        if self.deadline is not None:
+            deadline = min(deadline, self.deadline)
         while time.monotonic() < deadline:
             if b"\n" not in self.buffer:
                 if not self.selector.select(max(0, deadline - time.monotonic())):
