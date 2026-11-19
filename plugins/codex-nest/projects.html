@@ -66,8 +66,8 @@ section { padding: clamp(16px, 4vw, 36px); }
 .row .row-actions:hover:not(:disabled), .icon-action[aria-expanded="true"] { color: var(--icon-active); background: var(--pressed); }
 @media (hover: none) { .row .row-actions { opacity: 1; } }
 #status { margin: 0 4px 6px; }
-#status, #hint, #layout-message { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-#layout-message:not(:empty), #hint:not(:empty) { margin: 10px 4px; }
+#status, #hint, #layout-message, #project-search-status { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+#layout-message:not(:empty), #hint:not(:empty), #project-search-status:not(:empty) { margin: 10px 4px; }
 ul { padding: 0; margin: 8px 0 0; list-style: none; }
 li > ul { margin: 1px 0 2px 11px; padding-left: 5px; border-left: 1px solid var(--line); }
 .row { display: flex; align-items: center; min-height: 31px; border-radius: 7px; }
@@ -204,14 +204,14 @@ nav.project-dragging #root-drop {
   background: linear-gradient(currentColor, currentColor) center / 10px 1px no-repeat,
     linear-gradient(currentColor, currentColor) center / 1px 10px no-repeat;
 }
-#chat-search {
+.list-search {
   display: block;
   width: min(100%, 320px);
   margin: 4px 0 6px;
   padding: 5px 8px;
   background: var(--surface);
 }
-#chat-search::placeholder { color: var(--muted); }
+.list-search::placeholder { color: var(--muted); }
 #chats { margin-top: 0; }
 #chats .chat-row { min-width: 0; flex: 1; align-items: flex-start; background: transparent; text-decoration: none; }
 #chats .chat-row:hover { background: var(--pressed); }
@@ -243,6 +243,9 @@ nav.project-dragging #root-drop {
       aria-haspopup="dialog" aria-controls="editor-dialog" disabled>＋</button>
   </div></div>
   <p id="status" role="status" data-copy="loading">Loading…</p>
+  <input id="project-search" class="list-search" type="search" autocomplete="off" data-copy-label="searchProjects"
+    data-copy-placeholder="searchProjects" aria-controls="tree">
+  <p id="project-search-status" role="status"></p>
   <form id="create-group" class="controls" novalidate hidden>
     <input id="group-name" data-copy-label="groupName" data-copy-placeholder="groupName" required maxlength="60">
     <button type="submit" data-copy="newGroup">New group</button>
@@ -260,7 +263,7 @@ nav.project-dragging #root-drop {
   <div id="conversations" hidden>
     <h3 data-copy="chats">Chats</h3>
     <button id="new-chat" class="row chat-row" type="button" data-copy="newChat" disabled>New chat</button>
-    <input id="chat-search" type="search" autocomplete="off" data-copy-label="searchChats"
+    <input id="chat-search" class="list-search" type="search" autocomplete="off" data-copy-label="searchChats"
       data-copy-placeholder="searchChats" aria-controls="chats">
     <p id="hint" role="status"></p><ul id="chats"></ul>
   </div>
@@ -372,6 +375,8 @@ const copy = {
   chats: ["聊天", "Chats"],
   newChat: ["新建聊天", "New chat"],
   searchChats: ["搜索聊天标题", "Search chat titles"],
+  searchProjects: ["搜索项目名称", "Search project names"],
+  noMatchingProjects: ["没有匹配的项目。", "No matching projects."],
   noMatchingChats: ["没有匹配的聊天。", "No matching chats."],
   primaryUnavailable: ["项目的 Primary 目录不可用。", "The primary project directory is unavailable."],
   sidebarActions: ["项目区操作", "Project sidebar actions"],
@@ -665,6 +670,23 @@ function buildTree(projects) {
   return roots;
 }
 
+function searchText(value) {
+  return value.trim().normalize().toLocaleLowerCase(language);
+}
+
+function matchingBranches(roots, query) {
+  const visible = new Set();
+  function visit(node) {
+    for (const child of node.children.values()) visit(child);
+    if (node.project ? searchText(node.label).includes(query)
+      : [...node.children.keys()].some(id => visible.has(id))) {
+      visible.add(node.id);
+    }
+  }
+  for (const node of roots.values()) visit(node);
+  return visible;
+}
+
 function element(tag, text, className) {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
@@ -811,11 +833,12 @@ window.addEventListener("resize", () => {
   }
 });
 
-function renderNodes(nodes, groupId) {
+function renderNodes(nodes, groupId, visible) {
   const list = element("ul");
   if (groupId) list.dataset.groupId = groupId;
   for (const node of [...nodes.values()].sort((a, b) =>
     names.compare(a.label, b.label) || a.id.localeCompare(b.id))) {
+    if (visible && !visible.has(node.id)) continue;
     const item = element("li");
     const row = element("div", undefined, "row");
     const button = element("button", undefined, node.project ? "name" : "name group-name");
@@ -829,16 +852,18 @@ function renderNodes(nodes, groupId) {
     item.append(row);
     if (node.children.size) {
       const toggle = element("button", undefined, "toggle");
-      const children = renderNodes(node.children, node.id);
+      const children = renderNodes(node.children, node.id, visible);
       toggle.type = "button";
+      toggle.disabled = Boolean(visible);
       function updateBranch() {
-        children.hidden = collapsed.has(node.id) && !dragSession?.preview.has(node.id);
+        children.hidden = !visible && collapsed.has(node.id) && !dragSession?.preview.has(node.id);
         const expanded = String(!children.hidden);
         toggle.setAttribute("aria-label", t(children.hidden ? "expand" : "collapse", {name: node.label}));
         toggle.setAttribute("aria-expanded", expanded);
         button.setAttribute("aria-expanded", expanded);
       }
       toggleBranch = () => {
+        if (visible) return;
         const next = new Set(collapsed);
         if (next.has(node.id)) next.delete(node.id);
         else next.add(node.id);
@@ -1196,8 +1221,8 @@ function renderDetails() {
 
 function renderChatList(project) {
   const activeChats = project?.chats.filter(chat => !archives.chats.has(chat.id)) ?? [];
-  const query = byId("chat-search").value.trim().normalize().toLocaleLowerCase(language);
-  const visibleChats = activeChats.filter(chat => chatTitle(chat).normalize().toLocaleLowerCase(language).includes(query));
+  const query = searchText(byId("chat-search").value);
+  const visibleChats = activeChats.filter(chat => searchText(chatTitle(chat)).includes(query));
   let hint = null;
   if (project?.chatError) hint = "remoteChatsUnavailable";
   else if (project && !activeChats.length) hint = data.initial ? "chatsNeedConnection" : "noActiveChats";
@@ -1255,16 +1280,28 @@ function renderProjectStatus() {
     ? "legacyChats" : data.projects.length ? "localProjects" : "noProjects");
 }
 
-function render() {
+function renderTree() {
   finishProjectDrag();
   branchViews.clear();
   closeMenu();
+  const projects = data.projects.filter(project => !archives.projects.has(project.id));
+  const roots = buildTree(projects);
+  const query = searchText(byId("project-search").value);
+  const visible = query ? matchingBranches(roots, query) : null;
+  setMessage("project-search-status", visible?.size === 0 ? "noMatchingProjects" : null);
+  byId("tree").replaceChildren(renderNodes(roots, null, visible));
+}
+
+byId("project-search").addEventListener("input", () => {
+  if (data) renderTree();
+});
+
+function render() {
   renderProjectStatus();
   const create = byId("new-project");
   create.disabled = !canCreateProject();
   byId("sidebar-menu").disabled = false;
-  const projects = data.projects.filter(project => !archives.projects.has(project.id));
-  byId("tree").replaceChildren(renderNodes(buildTree(projects)));
+  renderTree();
   renderDetails();
   if (byId("archive-dialog").open) renderArchive();
 }
