@@ -10,6 +10,7 @@ import time
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, urlencode
 
+import grouping_inbox
 from project_api import AppServer, ProjectAPIError, project_fields
 
 ROOT = Path(__file__).resolve().parent
@@ -487,7 +488,7 @@ class Server:
             version = params["protocolVersion"]
             return {
                 "protocolVersion": version if version in PROTOCOLS else "2025-11-25",
-                "serverInfo": {"name": "codex-nest", "version": "0.4.14", "icons": TOOL["icons"]},
+                "serverInfo": {"name": "codex-nest", "version": "0.4.15", "icons": TOOL["icons"]},
                 "capabilities": {"tools": {}, "resources": {}},
             }
         if method == "ping":
@@ -500,7 +501,7 @@ class Server:
                  "annotations": {"readOnlyHint": False, "destructiveHint": name == "archive_project_chats"},
                  "_meta": {"ui": {"resourceUri": URI, "visibility": ["app"]}}}
                 for name, description, props, required in ACTION_TOOLS
-            ]]}
+            ], *grouping_inbox.tool_definitions(URI)]}
         if method == "resources/list":
             return {"resources": [RESOURCE]}
         if method == "resources/read" and params.get("uri") == URI:
@@ -516,6 +517,8 @@ class Server:
             }
         if method == "tools/call" and params.get("name") in {tool[0] for tool in ACTION_TOOLS}:
             return action_result(params["name"], params.get("arguments", {}))
+        if method == "tools/call" and params.get("name") in grouping_inbox.TOOLS:
+            return grouping_inbox.exchange(codex_home(), params["name"], params.get("arguments", {}))
         raise LookupError(method)
 
 
