@@ -1,3 +1,9 @@
+## Git delivery
+
+When asked to commit changes, push the same commit to `origin` and `gitlab` by default. Use `main` for both unless the user specifies another branch.
+
+Keep the private `gitlab` URL in the local Git configuration. If the remote is missing, report it as blocked. After pushing, use `git ls-remote` to verify each target branch points to the intended commit and report each result separately.
+
 ## Agent skills
 
 ### Issue tracker
